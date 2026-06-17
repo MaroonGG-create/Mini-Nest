@@ -4,8 +4,9 @@ import { Request as ExpressRequest  } from "express";
 export class UserController{
     @Get('hello')
     handleRequest(@Req() req: ExpressRequest,@Request() request: ExpressRequest){
-        console.log('req', req)
-
+        console.log(req.url)
+        console.log(req.path)
+        console.log(req.method)
         return 'Hello User'
     }
 }

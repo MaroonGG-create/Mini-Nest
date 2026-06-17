@@ -35,9 +35,7 @@ export class NestApplication {
 
         
         for (const methodName of Object.getOwnPropertyNames(controllerPrototype)) {
-          console.log('methodName',methodName)
-          console.log(controllerPrototype[methodName]);
-          
+
           const method = controllerPrototype[methodName]
           
           //获取路由元数据
@@ -49,7 +47,10 @@ export class NestApplication {
 
           //注册路由
           this.app[httpMethod.toLowerCase()](routePath,(req: ExpressRequest, res: ExpressResponse, next: NextFunction)=>{
-              const result = method.call(controller)
+              const args = this.resolveParams(controller,methodName,req,res,next)
+            //调用方法
+
+              const result = method.call(controller,...args)
               res.send(result)
           })
           Logger.log(`Mapped {${routePath}}, ${httpMethod} route`,'RouterExplorer')
@@ -57,6 +58,23 @@ export class NestApplication {
 
     }
     Logger.log('Nest application successfully started','NestApplication')
+  }
+
+  private resolveParams(instance:any,methodName:string,req: ExpressRequest, res: ExpressResponse, next: NextFunction){
+    //获取方法参数元数据
+    const paramsMetaData= Reflect.getMetadata(`params:${methodName}`,instance,methodName)
+
+    return paramsMetaData.sort((a,b)=>a.parameterIndex-b.parameterIndex).map((paramMetaData)=>{
+
+      const key = paramMetaData
+      switch (key) {
+        case "Request":
+        case "Req":
+          return req
+        default:
+          return null  
+      }
+    })
   }
   /**
    * 启动应用程序并监听指定端口
