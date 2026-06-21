@@ -5,7 +5,6 @@ export class NestFactory {
     Logger.log("Starting Nest application...", "NestFactory");
 
     const app = new NestApplication(module);
-
     return app
   }
 }

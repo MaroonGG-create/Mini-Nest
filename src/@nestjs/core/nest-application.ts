@@ -1,6 +1,8 @@
 import express,{Express,Request as ExpressRequest,Response as ExpressResponse,NextFunction} from 'express'
 import { Logger } from './logger'
 import path from 'path'
+import { boolean } from 'zod/v4'
+
 /**
  * NestApplication 类是 NestJS 框架的核心类，用于创建和配置 Nest 应用程序实例。
  * 它提供了启动应用、关闭应用以及配置应用的各种方法。
@@ -10,8 +12,19 @@ export class NestApplication {
 
   private readonly app:Express = express()
 
-  constructor(protected readonly module) {}
+  constructor(protected readonly module) {
+    this.app.use(express.json()) //用来把json格式的请求体放到req.body上
+    this.app.use(express.urlencoded({ extended: true })) //把form表单格式的请求体对象放在req.body上
+  }
   //配置初始化
+/**
+ * 使用中间件的方法
+ * @param middleware - 要使用的中间件函数，可以是Express中间件或其他兼容的中间件
+ * 该方法将传入的中间件添加到应用程序的中间件堆栈中
+ */
+  use(middleware: any){
+    this.app.use(middleware) // 调用底层app实例的use方法来注册中间件
+  }
   async init(){
 
     //初始化控制器
@@ -48,10 +61,17 @@ export class NestApplication {
           //注册路由
           this.app[httpMethod.toLowerCase()](routePath,(req: ExpressRequest, res: ExpressResponse, next: NextFunction)=>{
               const args = this.resolveParams(controller,methodName,req,res,next)
-            //调用方法
+              //调用方法
 
               const result = method.call(controller,...args)
-              res.send(result)
+              
+              //判断controller的methodName方法里有没有使用response或者res参数装饰器，如果有用到则不发响应
+              const responseMetadata = this.getResponseMetadata(controller,methodName)
+              //或者没有注入response参数装饰器，或者注入了但是传递了passthrough参数
+              if(!responseMetadata || (responseMetadata?.data?.passthrough)){
+                res.send(result)
+              }
+              
           })
           Logger.log(`Mapped {${routePath}}, ${httpMethod} route`,'RouterExplorer')
         }
@@ -59,18 +79,40 @@ export class NestApplication {
     }
     Logger.log('Nest application successfully started','NestApplication')
   }
+  private getResponseMetadata(controller,methodName){
 
+      const paramsMetaData= Reflect.getMetadata(`params:${methodName}`,controller,methodName) ?? []
+
+      return paramsMetaData.filter(Boolean).find((param)=>param.key ==='Res' || param.key ==='Response')
+  }
   private resolveParams(instance:any,methodName:string,req: ExpressRequest, res: ExpressResponse, next: NextFunction){
     //获取方法参数元数据
-    const paramsMetaData= Reflect.getMetadata(`params:${methodName}`,instance,methodName)
+    const paramsMetaData= Reflect.getMetadata(`params:${methodName}`,instance,methodName) ?? []
 
-    return paramsMetaData.sort((a,b)=>a.parameterIndex-b.parameterIndex).map((paramMetaData)=>{
+    return paramsMetaData.map((paramMetaData)=>{
 
-      const key = paramMetaData
+      const {key,data} = paramMetaData
       switch (key) {
         case "Request":
         case "Req":
           return req
+        case 'Query':
+          //这里做的操作是，如果data存在，则返回req.query[data]的值，否则返回req.query的值
+          //这里req.query是一个对象，可以通过key来获取对应的值
+          return  data?req.query[data]:req.query 
+        case 'Headers':  
+          return data?req.headers[data]:req.headers
+        case 'Session':
+          return  data?(req as any).session[data]:(req as any).session
+        case 'Ip':
+          return  req.ip
+        case 'Param':
+          return  data?req.params[data]:req.params
+        case 'Body':
+          return  data?req.body[data]:req.body       
+        case "Response":
+        case "Res":
+          return res;      
         default:
           return null  
       }
