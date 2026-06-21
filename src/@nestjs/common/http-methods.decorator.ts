@@ -13,7 +13,7 @@ export function Get(path:string =''):MethodDecorator {
     //descriptor.value.path = path
     Reflect.defineMetadata('method', 'GET', descriptor.value)
     //descriptor.value.method = 'GET'
-  }111111111111111111111
+  }
 
 }
 
